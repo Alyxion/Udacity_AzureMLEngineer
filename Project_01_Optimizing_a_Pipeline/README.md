@@ -39,13 +39,18 @@ The best model achieved in accuracy of 91.3831% after 100 training iterations an
 The Azure AutoML task for logistic regression tried overall 29 different model and hyperparamter combinations including RandomForest, LightGBM, ExtremeRandomTreets, XGBoost, StackEnsemble, GradientBoosting, a simple LogisticRegression as we used it via SciKit and a VotingEnsemble.
 
 The setup of the pipeline itself was rather easy - you have to define a task, in our case a classification, the main metric, to be able to compare the performance we optimized for accuracy here as well, the dataset
-to use, the column in it which represents your target label and optionally the compute cluster to use for the AutoML job.
+to use, the column in it which represents your target label and optionally the compute cluster to use for the AutoML job. I configured a timeout of 30 minutes and 5 cross validations.
 
 The original notebook of this exercise did not use a compute cluster but executed the AutoML job locally. As this is of course far from reality I changed the configuration to use my previous created cluster for the job. Unfortunately but not surprisingly this did not work anymore with a locally, memory resident Pandas dataframe as it was solved in the example code.
 
 But after some authorization hurdles I managed to upload the cleaned data as temporary Pandas dataframe via TabularDataSetFactory.register_pandas_dataframe to make it available to the whole cluster and could execute the AutoML jobs at scale. Overall the ML job ran for 42 minutes.
 
-The best forming model was a Voting Ensemble with an accuracy of 91.684%.
+The best forming model was a Voting Ensemble with an accuracy of 91.684%, it combined several strong algorithms, namely  'LightGBM', 'XGBoostClassifier', 'XGBoostClassifier', 'XGBoostClassifier', 'XGBoostClassifier', 'LightGBM', 'RandomForest' and combined their prediction with the following weightings:
+
+LightGBM: 0.2857142857142857
+XGBoostClassifiers: 0.07142857142857142, 0.21428571428571427, 0.07142857142857142, 0.14285714285714285
+LightGBM once more: 0.14285714285714285
+and a RandomForest approach with a weight of 0.07142857142857142.
 
 A great benefit of AzureML was that it did not just provide a ready-to-use model but also the possibility to analyze why this model performed better in which features had the biggest influence on the outcome.
 
@@ -61,4 +66,6 @@ Less surprisingly the AutoML model performed slightly better than the straight f
 In reality you usually though don't start with such a clean dataset and usually the biggest share of the work is to clean the data and engineer the features to such a level in the first place. Anyways I will definitely try AzureML in future projects again as nothing is more valuable the your worktime... and there of AzureML can save a lot.
 
 ## Future work
-As already mentioned in the upper section it was actually not intended by the authors to involve the **duration** feature in a real benchmark - after all you just know this value after the call is already done. Training the models again without this feature will likely perform far worse. I assume though that this was the intention of Udacity and Microsoft to simply make it easier for the students to experiment and to a bigger success feeling when the output shows an accuracy of over 90% rather than 75% or below. If I had to increase this accuracy I would like to further enhanced my knowledge about each customer e.g. by adding geographical information such as average neighborhood income.
+As already mentioned in the upper section it was actually not intended by the authors to involve the **duration** feature in a real benchmark - after all you just know this value after the call is already done, so when it's too late - because what you want to do is of course is to plan the most effective calls.
+
+Training the models again without this feature by removing this line before the training will likely perform by far worse. I assume though that this was the intention of Udacity and Microsoft to simply make it easier for the students to experiment and to a bigger success feeling when the output shows an accuracy of over 90% rather than 75% or below. If I had to increase this accuracy I would likely further enhance my knowledge about each customer e.g. by adding geographical information such as average neighborhood income/wealth to predict the user's income. In addition social media data from LinkedIn, Facebook or Twitter such as general interest in financial topics could also provide interesting further feature data.
