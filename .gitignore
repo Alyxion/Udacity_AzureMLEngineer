@@ -1,3 +1,4 @@
+ml_principal.json
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -127,3 +128,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+/Config/endpoint.json
+/Config/ml_principal.json
+/Project_02_Operationalizing_ML_Models/video_cutting
+/Project_02_Operationalizing_ML_Models/screenshots/~$Architecture.pptx
