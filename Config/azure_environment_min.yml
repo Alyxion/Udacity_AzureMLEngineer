@@ -46,4 +46,4 @@ dependencies:
     - pyarrow==1.0.1
     - requests
     - scikit-image
-    - scikit-learn
+    - scikit-learn==0.22.2.post1

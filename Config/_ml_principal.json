@@ -1,0 +1,7 @@
+{
+  "clientId": "YOUR_CLIENT_ID_SECRET_HERE",
+  "clientSecret": "YOUR_SECRET_HERE",
+  "subscriptionId": "YOUR_SUBSCRIPTION_ID_HERE",
+  "tenantId": "YOUR_TENANT_ID_HERE",
+  "resourceGroup": "YOUR_RESOURCE_GROUP_HERE"
+}
