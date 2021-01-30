@@ -1,3 +1,4 @@
+# +
 def check_isnotebook():
     """
     Checks if the source code is executed from the console or within Jupyter, e.g. using jupy-text
@@ -14,3 +15,12 @@ def check_isnotebook():
             return False  # Other type (?)
     except NameError:
         return False      # Probably standard Python interpreter
+        
+def visualize_nb_data(data):
+    """
+    Displays the data in Jupyter notebook if possible, otherwise prints it
+    """
+    if not check_isnotebook():
+        print(data)
+    else:
+        display(data)        

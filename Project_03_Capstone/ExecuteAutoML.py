@@ -1,3 +1,20 @@
+# +
+# configuration
+experiment_timeout = 180 # Best result achieved after 65 minutes
+
+main_test_set = "EngineeredMortgageSpread"
+unclean_test_set = "UncleanedMortgageSpread"
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--unclean', type=bool, default=False, help="Defines if the uncleaned, unengineered data set shall be used")
+args = parser.parse_args()
+if args.unclean:
+    used_data_set = unclean_test_set
+else:
+    used_data_set = main_test_set
+print(f"Using dataset {used_data_set}...")
+# -
+
 from azureml.core.compute import AmlCompute
 from azureml.core.compute import ComputeTarget
 from azureml.core.compute_target import ComputeTargetException
@@ -31,8 +48,11 @@ if not common_path in sys.path:
 # %load_ext autoreload
 # %autoreload 2
 from ml_principal_authenticate import AzureMLAuthenticator
+from notebook_check import *
+from seaborn_vis import *
 
 # +
+print("Connecting to AzureML Workspace...")
 service_authenticator = AzureMLAuthenticator(config_path=os.path.normpath(f"{os.getcwd()}/../Config"))
 
 ws = service_authenticator.get_workspace("aml_research")
@@ -42,48 +62,44 @@ else:
     print("Workspace not available")
 
 # +
-amlcompute_cluster_name = "lprio-cpu-clst"
+print("Setting up compute cluster...")
+
+amlcompute_cluster_name = "tmplpriocluster"
 
 # Verify that cluster does not exist already
 try:
     compute_target = ComputeTarget(workspace=ws, name=amlcompute_cluster_name)
+    compute_target.update(min_nodes=5, max_nodes=5, idle_seconds_before_scaledown=600)
     print('Found existing cluster, use it.')
 except ComputeTargetException:
     compute_config = AmlCompute.provisioning_configuration(vm_size='STANDARD_DS12_V2',# for GPU, use "STANDARD_NC6"
                                                            vm_priority = 'lowpriority',
+                                                           min_nodes=5,
                                                            max_nodes=5)
     compute_target = ComputeTarget.create(ws, amlcompute_cluster_name, compute_config)
-
-compute_target.update(min_nodes=5, max_nodes=5, idle_seconds_before_scaledown=600)
 compute_target.wait_for_completion(show_output=True, min_node_count = 5, timeout_in_minutes = 10)
-
-# +
-main_test_set = "EngineeredMortgageSpread"  # TODO Export
-
-# Try to load the dataset from the Workspace. Otherwise, create it from the file
-# NOTE: update the key to match the dataset name
-found = False
-
-dataset = None
-if main_test_set in ws.datasets.keys(): 
-    found = True
-    dataset = ws.datasets[main_test_set] 
-
-df = dataset.to_pandas_dataframe()
-df.describe()
 # -
 
-dataset.take(5).to_pandas_dataframe()
+dataset = None
+if used_data_set in ws.datasets.keys(): 
+    dataset = ws.datasets[used_data_set]
+df = dataset.to_pandas_dataframe()
+visualize_nb_data(df.describe())
+
+visualize_nb_data(dataset.take(5).to_pandas_dataframe())
 
 experiment_name = 'AzureMLCapstoneExperiment'
+if args.unclean:
+    experiment_name = 'AzureMLCapstoneExperimentUnclean'
 project_folder = './pipeline-project'
 experiment = Experiment(ws, experiment_name)
-experiment
+if check_isnotebook():
+    display(experiment)
 
 # +
 automl_settings = {
-    "experiment_timeout_minutes": 180,
-    "max_concurrent_iterations": 5,
+    "experiment_timeout_minutes": experiment_timeout,
+    "max_concurrent_iterations": 4,
     "primary_metric" : 'r2_score'
 }
 automl_config = AutoMLConfig(compute_target=compute_target,
@@ -121,23 +137,17 @@ pipeline = Pipeline(
 
 pipeline_run = experiment.submit(pipeline)
 
-# +
-from notebook_check import check_isnotebook
-
 if check_isnotebook():
     from azureml.widgets import RunDetails
     RunDetails(pipeline_run).show()
-# -
 
+print("Waiting for ML run to finish execution...")
 pipeline_run.wait_for_completion()
-
-pipeline_run.wait_for_completion()
+print("Deleting computing resources...")
+compute_target.delete()
 
 metrics_output = pipeline_run.get_pipeline_output(metrics_output_name)
 num_file_downloaded = metrics_output.download('.', show_progress=True)
-
-# +
-# Download and visualize the performance of the single models tried
 
 # +
 import json
@@ -146,7 +156,7 @@ with open(metrics_output._path_on_datastore) as f:
     
 deserialized_metrics_output = json.loads(metrics_output_result)
 df = pd.DataFrame(deserialized_metrics_output)
-df
+visualize_nb_data(df)
 # -
 
 # Retrieve best model from Pipeline Run
@@ -158,10 +168,20 @@ import pickle
 
 with open(best_model_output._path_on_datastore, "rb" ) as f:
     best_model = pickle.load(f)
-best_model
+visualize_nb_data(best_model)
 # -
 
-import sklearn
-print(sklearn.__version__)
+visualize_nb_data(best_model.steps)
+
+print("Preparing test set...")
+df_test = dataset.to_pandas_dataframe()
+df_test = df_test[pd.notnull(df_test['rate_spread'])]
+y_test = df_test['rate_spread']
+X_test = df_test.drop(['rate_spread'], axis=1)
+
+from sklearn.metrics import confusion_matrix
+ypred = best_model.predict(X_test)
+
+print(ypred)
 
 
