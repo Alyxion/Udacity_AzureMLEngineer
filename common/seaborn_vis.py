@@ -1,7 +1,11 @@
+# ### Helper functions to visualize residuals and to create statistics of regression models
+
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import scipy.stats as ss
+import sklearn.metrics as sklm
+import math
 
 def hist_resids(y_test, y_score, model):
     """
@@ -62,6 +66,25 @@ def show_pred_vs_test(y_test, y_score, model):
     plt.xlabel("Test sample")
     plt.title("Predicted vs. test value ({})".format(model))
     plt.show()    
+
+# +
+def get_regression_metrics(y_true, y_predicted, n_parameters):
+    """
+    Returns the prediction's performance
+    
+    :param y_true: The values
+    :param y_predicted: The predicted value
+    :param n_paramaters: The amount of features
+    """
+    r2 = sklm.r2_score(y_true, y_predicted)
+    r2_adj = r2 - (n_parameters - 1)/(y_true.shape[0] - n_parameters) * (1 - r2)    
+    mean_sq = sklm.mean_squared_error(y_true, y_predicted)
+    return {"mean_sq":mean_sq,\
+    "rmean_sq":math.sqrt(mean_sq), \
+    "mean_abs": sklm.mean_absolute_error(y_true, y_predicted), \
+    "median_abs": sklm.median_absolute_error(y_true, y_predicted), \
+    "r2_score": r2, \
+    "adjr2_score": r2_adj}
 
 def print_metrics(y_true, y_predicted, n_parameters):
     """

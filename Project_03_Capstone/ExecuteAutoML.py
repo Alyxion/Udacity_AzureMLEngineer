@@ -99,7 +99,7 @@ if check_isnotebook():
 # +
 automl_settings = {
     "experiment_timeout_minutes": experiment_timeout,
-    "max_concurrent_iterations": 4,
+    "max_concurrent_iterations": 5,
     "primary_metric" : 'r2_score'
 }
 automl_config = AutoMLConfig(compute_target=compute_target,
