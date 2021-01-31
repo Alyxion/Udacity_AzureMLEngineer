@@ -1,3 +1,11 @@
+# ### Azure AutoML training script
+#
+# This script setups and executes an Azure AutoML pipeline to let AzureML intelligently find the best regression algorithm and hyperparameter combination to predict the mortgage rate in a pre-engineered dataset we provided it.
+#
+# To do so we already provisioned the data in form of an AzureML dataset named **EngineeredMortgageSpread** using the script ProvisionDataSets.py to make it available for the training cluster. All we still need to do then is to define the target column, rescrictions in form of time limits, the primary metrics and the amount of compute power we want to provide and then AutoML basically executes the complete training process for us.
+#
+# After the process has finished it tells us the best run and it's metrics so we could right afterwards forward it e.g. for regression tests.
+
 # +
 # configuration
 experiment_timeout = 180 # Best result achieved after 65 minutes
@@ -15,9 +23,6 @@ else:
 print(f"Using dataset {used_data_set}...")
 # -
 
-from azureml.core.compute import AmlCompute
-from azureml.core.compute import ComputeTarget
-from azureml.core.compute_target import ComputeTargetException
 import logging
 import os
 import sys
@@ -51,15 +56,21 @@ from ml_principal_authenticate import AzureMLAuthenticator
 from notebook_check import *
 from seaborn_vis import *
 
+# ### Log into AzureML Workspace
+
 # +
 print("Connecting to AzureML Workspace...")
-service_authenticator = AzureMLAuthenticator(config_path=os.path.normpath(f"{os.getcwd()}/../Config"))
+config_path = os.path.normpath(f"{os.getcwd()}/../Config")
+service_authenticator = AzureMLAuthenticator(config_path=config_path)
 
 ws = service_authenticator.get_workspace("aml_research")
 if ws is not None:
     print(ws.name, ws.resource_group, ws.location, ws.subscription_id, sep = '\n')
 else:
     print("Workspace not available")
+# -
+
+# ### Set up training cluster
 
 # +
 print("Setting up compute cluster...")
@@ -88,6 +99,8 @@ visualize_nb_data(df.describe())
 
 visualize_nb_data(dataset.take(5).to_pandas_dataframe())
 
+# ### Setup experiment
+
 experiment_name = 'AzureMLCapstoneExperiment'
 if args.unclean:
     experiment_name = 'AzureMLCapstoneExperimentUnclean'
@@ -95,6 +108,8 @@ project_folder = './pipeline-project'
 experiment = Experiment(ws, experiment_name)
 if check_isnotebook():
     display(experiment)
+
+# ### Setup AutoML pipeline
 
 # +
 automl_settings = {
@@ -107,7 +122,7 @@ automl_config = AutoMLConfig(compute_target=compute_target,
                              training_data=dataset,
                              label_column_name="rate_spread",   
                              path = project_folder,
-                             enable_early_stopping= True,
+                             enable_early_stopping= True,                             
                              featurization= 'auto',
                              debug_log = "automl_errors.log",
                              **automl_settings
@@ -135,11 +150,15 @@ pipeline = Pipeline(
     steps=[automl_step])
 # -
 
+# ### Execute pipeline and wait for it to finish
+
 pipeline_run = experiment.submit(pipeline)
 
 if check_isnotebook():
     from azureml.widgets import RunDetails
     RunDetails(pipeline_run).show()
+
+# ### Clean up computing resources and test the model
 
 print("Waiting for ML run to finish execution...")
 pipeline_run.wait_for_completion()
@@ -179,9 +198,4 @@ df_test = df_test[pd.notnull(df_test['rate_spread'])]
 y_test = df_test['rate_spread']
 X_test = df_test.drop(['rate_spread'], axis=1)
 
-from sklearn.metrics import confusion_matrix
 ypred = best_model.predict(X_test)
-
-print(ypred)
-
-

@@ -1,13 +1,27 @@
+# ### Small scale regression AutoML
+#
+# This script loads training data from a predefined training set from an Azure ML Workspace and iterates though three different models with externally definable hyperparameters as shown below:
+# * --lrf, type=float, default="1.0"The learning rate factor. 1.0 = Recommended learning rate for each model type.")
+# * --dataset, type=str, default="EngineeredMortgageSpread - The name of the registered dataset to use. EngineeredMortgageSpread by default
+# * --models, type=str, default="all" - The comma separated list of models to test. One of linear, mlpregressor, gradientboosting or all are valid values.
+# * --iterations, type=int, default=200 - The number of neural network training iterations")
+# * --complexity, type=float, default=1.0 - The complexity (size) of the models being trained. 1.0 = reasonable complex set of estimators or neural network layers. The precise selection of layers, estimators and GradientBoosting depth will be returned by the script for consistent reproducability.
+#
+# The script can either be executed in the normal project environment or in a container. If it shall be executed in a container a file named **hd_training_run_config.json** should be placed so the script knows that all search paths for config files and dependencies should be directed to the execution directory.
+
+import os
+is_training_execution = "hd_training_run_config.json" in os.listdir()
+if is_training_execution:
+    print("Detected training configuration file. Enabling containerized execution mode.")
+
 print("Executing custom model training...")
 print("Initializing base modules")
 from azureml.core.compute import AmlCompute
 from azureml.core.compute import ComputeTarget
 from azureml.core.compute_target import ComputeTargetException
 import logging
-import os
 import sys
 import csv
-from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn import datasets
@@ -21,22 +35,14 @@ import sklearn.decomposition as skde
 from sklearn import feature_selection as fs
 from azureml.core.experiment import Experiment
 from azureml.core.workspace import Workspace
-from azureml.train.automl import AutoMLConfig
 from azureml.core.dataset import Dataset
-from azureml.data.dataset_factory import TabularDatasetFactory
-from azureml.pipeline.steps import AutoMLStep
-from azureml.pipeline.core import Pipeline
-from azureml.pipeline.core import PipelineData, TrainingOutput
-from azureml.core.compute import AmlCompute
-from azureml.core.compute import ComputeTarget
-from azureml.core.compute_target import ComputeTargetException
 from azureml.core.run import Run
 import joblib
 import json
 # Check core SDK version number
 print("Using Azure ML SDK version:", azureml.core.VERSION)
 # add common directory as module search path
-common_path = os.getcwd()+"/../common"
+common_path = os.getcwd()+"/../common" if not is_training_execution else os.getcwd()
 if not common_path in sys.path:
     sys.path.append(common_path)
 common_path = os.getcwd()
@@ -47,6 +53,8 @@ if not common_path in sys.path:
 from ml_principal_authenticate import AzureMLAuthenticator
 from notebook_check import *
 from seaborn_vis import *
+
+# ### Defintion of different regression models using a shared base class BaseModel
 
 # +
 from sklearn.neural_network import MLPRegressor
@@ -134,6 +142,10 @@ class GradientBoostingModel(BaseModel):
         self.model = clf
 
 
+# -
+
+# ### Definition of helper functions for authentication, dataset fetching and dataset preparation
+
 # +
 global ws # The workspace
 
@@ -144,7 +156,8 @@ def azure_login():
     :return: The workspace
     """
     print("Authenticating to Azure, logging into AzureML workspace")
-    service_authenticator = AzureMLAuthenticator(config_path=os.path.normpath(f"{os.getcwd()}/../Config"))
+    config_path = os.path.normpath(f"{os.getcwd()}/../Config") if not is_training_execution else os.getcwd()
+    service_authenticator = AzureMLAuthenticator(config_path=config_path)
     ws = service_authenticator.get_workspace("aml_research")
     return ws
 
@@ -186,7 +199,7 @@ def convert_categorical_columns(data_set):
                                  ], axis=1)
     return reduced_data_set
 
-def prepara_dataset(df, sample_size=2):
+def prepara_dataset(df, sample_size=2, silent=False):
     """
     Prepares the dataset fortraining
     
@@ -197,7 +210,8 @@ def prepara_dataset(df, sample_size=2):
     if sample_size!=0:
         visualize_nb_data(training_data_pd.sample(sample_size))    
     # Receive training data target labels
-    print("Removing label from dataset, converting categorical to binary data")
+    if not silent:
+        print("Removing label from dataset, converting categorical to binary data")
     training_rate_spread = np.array(training_data_pd['rate_spread'])
     prepared_training_set = convert_categorical_columns(training_data_pd)
     features = np.array(prepared_training_set)
@@ -205,16 +219,22 @@ def prepara_dataset(df, sample_size=2):
     print("Prepared training set")
     if sample_size!=0:
         visualize_nb_data(prepared_training_set.sample(sample_size))    
+    global scaler
     scaler = preprocessing.StandardScaler().fit(features)
+    global label_scaler
     features = scaler.transform(features)
     label_scaler = preprocessing.StandardScaler().fit(labels)
     labels = label_scaler.transform(labels)
     X_train, X_valid, y_train, y_valid = ms.train_test_split(features, labels, test_size=0.1, random_state=42)
     X_train, X_test, y_train, y_test = ms.train_test_split(X_train, y_train, test_size=0.1, random_state=42)    
-    return {'train': [X_train, y_train], 'valid': [X_valid, y_valid], 'test': [X_test, y_test]}
+    return {'train': [X_train, y_train], 'valid': [X_valid, y_valid], 'test': [X_test, y_test], 'originalSet': prepared_training_set}
 
 
 # -
+
+# ### Model training
+#
+# Tries all defines models with the set of hyperparameters passed in from external via parameters.
 
 available_model_architectures = ['linear', 'mlpregressor', 'gradientboosting']
 current_model = None
@@ -264,26 +284,33 @@ def train_models(architectures, parameters, X_train, y_train, X_test, y_test, pl
     return models
 
 
+# ### Script entry point
+#
+# Fetch arguments - evaluates the best model and stores it in the outputs folder so it can be received and persisted by the Azure Job system.
+
 # +
 import argparse
 
 def main():
     if check_isnotebook(): # calm down argparse when testing in a notebook
-        sys.argv = ['','--models=linear,mlpregressor','--complexity=0.2', '--iterations=50']
+        sys.argv = ['','--models=linear,mlpregressor','--complexity=0.2', '--iterations=50', '--test=1']
+    global ws
+    ws = azure_login()
     run = Run.get_context()
     # Add arguments to script
     parser = argparse.ArgumentParser(description='Trains a machine learning model to predict the mortgage spread for different genders and ethical groups of people in different regions of the US to verify the fairness of the morgage rate computation process.')
-    parser.add_argument('--lrf', type=float, default="1.0", help="The learning rate factor. 1.0 = Recommended learning rate for each model type.")
+    parser.add_argument('--lrf', type=float, default=1.0, help="The learning rate factor. 1.0 = Recommended learning rate for each model type.")
     parser.add_argument('--dataset', type=str, default="EngineeredMortgageSpread", help="The name of the registered dataset to use. EngineeredMortgageSpread by default")
     parser.add_argument('--models', type=str, default="all", help="The comma separated list of models to try. linear, mlpregressor, gradientboosting or all are valid values.")
     parser.add_argument('--iterations', type=int, default=200, help="The number of neural network training iterations")
     parser.add_argument('--complexity', type=float, default=1.0, help="The complexit of the models used. 1.0 = reasonable complex. Values should be between 0.0 and 4.0.")
+    parser.add_argument('--test', type=bool, default=False, help="Defines if the dumped model shall be loaded from disk and tested")
     args = parser.parse_args()
     # login to asure
-    global ws
-    ws = azure_login()
     # load and prepare datasets
+    global df
     df = load_dataset(args.dataset, sample_size=0)
+    global training_data
     training_data = prepara_dataset(df, sample_size=0)
     # select models to train
     architectures = available_model_architectures.copy() if args.models=='all' else args.models.split(',')
@@ -292,9 +319,11 @@ def main():
             print(f"Unknown model type {model}")
     # execute model training
     print(f"Training the following model types: {architectures}")
+    global result_models
     result_models = train_models(architectures, args, *training_data['train'], *training_data['test'], plot=False)
     # find best model
     r2_scores = [cur_model['metrics']['r2_score'] for cur_model in result_models]    
+    global best_model_index
     best_model_index = np.argmax(r2_scores)
     best_model_metrics = result_models[best_model_index]['metrics']
     print(f'\nTraining finished.\n\nThe best performing model is the model using the following parameters:')
@@ -307,15 +336,34 @@ def main():
     if not 'outputs' in os.listdir('.'):
         os.mkdir('outputs')
     # save model and config to disk
-    joblib.dump(result_models[best_model_index]['model'].model,'outputs/model.pkl') # store the model as pickl
-    with open('outputs/model_training_config.json', "w") as config_file:
-        config_file.write(json.dumps(result_models[best_model_index]['parameters'], indent=4, sort_keys=True))
+    complete_model = {'model': result_models[best_model_index]['model'].model,
+                      'trainingParameters': result_models[best_model_index]['parameters'],
+                      'scaler': scaler,
+                      'labelScaler': label_scaler,
+                      'preservedColumns': training_data['originalSet'].columns.tolist()
+                     }    
+    joblib.dump(complete_model, 'outputs/model.pkl') # store the model and helper class data as pickl
     for key, value in best_model_metrics.items(): # log performance to Azure
         run.log(key, value)
-    
+    if args.test:
+        with open(r"outputs/model.pkl", "rb") as input_file:
+            model_components = joblib.load(input_file)
+            test_rows = df.sample(50)
+            test_df = test_rows.drop(columns=['rate_spread', 'row_id'])
+            converted = convert_categorical_columns(test_df)
+            transformed_set = model_components['scaler'].transform(converted)
+            predictions = model_components['model'].predict(transformed_set)
+            predictions = model_components['labelScaler'].inverse_transform(predictions)
+            real_values = test_rows.loc[:, 'rate_spread'].tolist()
+            print("--------- Testing model ------------")
+            print("Predictions")
+            print(predictions)
+            print("------------------------------------")
+            print("Residuals:")
+            print(predictions-real_values)        
+
 if __name__ == '__main__':
     main()
 # -
-
 
 

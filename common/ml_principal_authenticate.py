@@ -73,7 +73,7 @@ class AzureMLAuthenticator:
            tenant_id=config_data['tenantId'],
            service_principal_id=config_data['clientId'],
            service_principal_password=config_data['clientSecret'])        
-        workspaces = [key for key in Workspace.list(config_data['subscriptionId']).keys()]
+        workspaces = [key for key in Workspace.list(config_data['subscriptionId'], auth=svc_pr).keys()]
         if workspace_name not in workspaces:
             print(f"Workspace {workspace_name} not found in workspace list. Please create the workspace or adjust the scripts accordingly.")
             print("\nFollowing workspaces could be found:")

@@ -1,8 +1,15 @@
 # ### Helper functions to visualize residuals and to create statistics of regression models
 
 import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
+try:
+    import seaborn as sns
+    seaborn_available = True
+except:
+    seaborn_available = False
+try:
+    import matplotlib.pyplot as plt
+except:
+    pass
 import scipy.stats as ss
 import sklearn.metrics as sklm
 import math
@@ -11,6 +18,9 @@ def hist_resids(y_test, y_score, model):
     """
     Plots the residuals as histogram
     """
+    if not seaborn_available:
+        print("Seaborn not available")
+        return
     ## first compute vector of residuals. 
     resids = np.subtract(y_test.reshape(-1,1), y_score.reshape(-1,1))
     ## now make the residual plots
@@ -25,6 +35,9 @@ def resid_qq(y_test, y_score, model):
     """
     Plots the offset between test and prediction values
     """
+    if not seaborn_available:
+        print("Seaborn not available")
+        return
     ## first compute vector of residuals. 
     resids = np.subtract(y_test.reshape(-1,1), y_score.reshape(-1,1))
     ## now make the residual plots
@@ -39,6 +52,9 @@ def resid_plot(y_test, y_score, model):
     """
     Plots the residuals
     """
+    if not seaborn_available:
+        print("Seaborn not available")
+        return
     ## first compute vector of residuals. 
     resids = np.subtract(y_test.reshape(-1,1), y_score.reshape(-1,1))
     ## now make the residual plots
@@ -52,6 +68,9 @@ def show_pred_vs_test(y_test, y_score, model):
     """
     Compares predicted to test values
     """
+    if not seaborn_available:
+        print("Seaborn not available")
+        return
     samples = 60
     fig = plt.figure(figsize=(16,6))
     x = range(samples)
@@ -90,6 +109,9 @@ def print_metrics(y_true, y_predicted, n_parameters):
     """
     Prints the model's performance to the console
     """
+    if not seaborn_available:
+        print("Seaborn not available")
+        return
     ## First compute R^2 and the adjusted R^2
     r2 = sklm.r2_score(y_true, y_predicted)
     r2_adj = r2 - (n_parameters - 1)/(y_true.shape[0] - n_parameters) * (1 - r2)    
