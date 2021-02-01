@@ -4,6 +4,8 @@ __pycache__/
 outputs/
 local_training_script/
 training_script/
+aml_model
+hd_model
 temp
 *.py[cod]
 Project_03_Capstone/azureml

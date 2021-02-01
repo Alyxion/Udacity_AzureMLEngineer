@@ -221,8 +221,6 @@ visualize_nb_data(metrics)
 best_model_output = pipeline_run.get_pipeline_output(best_model_output_name)
 num_file_downloaded = best_model_output.download('.', show_progress=True)
 
-best_model
-
 # +
 import pickle
 
@@ -249,17 +247,25 @@ print(y_test.tolist())
 if seaborn_available:
     resid_qq(y_pred, np.array(y_test.tolist()), 'Best algorithm')
 
+# +
 import shutil
 try:
     os.mkdir("temp")
 except:
     pass
+
+try:
+    os.mkdir("aml_model")
+except:
+    pass
+
 try:
     os.mkdir("temp/outputs")
 except:
     pass
 df_test.to_json("temp/test_sample.json")
-shutil.copy(best_model_output._path_on_datastore, "temp/model_data")
+shutil.copy(best_model_output._path_on_datastore, "aml_model/model_data")
+# -
 
 # ### Model Deployment
 #
@@ -285,13 +291,14 @@ from azureml.core.model import InferenceConfig
 from azureml.core.environment import Environment
 
 # Create the environment
-myenv = Environment(name="mortgage_score_env")
+myenv = Environment(name="mortgage_score_env_aml")
 conda_dep = CondaDependencies()
 
 # Define the packages needed by the model and scripts
 conda_dep.add_conda_package("numpy")
 conda_dep.add_conda_package("pip")
-conda_dep.add_conda_package("scikit-learn=0.22.2.post1")
+conda_dep.add_conda_package("scikit-learn=0.22.2.post1") # required for AutoML
+# conda_dep.add_conda_package("scikit-learn=0.20.3")  # required for HyperDrive trained model
 # You must list azureml-defaults as a pip dependency
 conda_dep.add_pip_package("azureml-defaults==1.11.0")
 conda_dep.add_pip_package("azureml-core")
@@ -319,18 +326,22 @@ inference_config = InferenceConfig(entry_script='score.py', environment=myenv)
 #
 # For faster pre-evaluation (as a web deployment can take up to 10 minutes) I test the script locally (which usually just takes 20 seconds) before deploying it to the web.
 
+df_test.head(10)
+
+partial_data = df_test[0:50].to_json()
+run_data = json.dumps({'data':partial_data})
+print(run_data)
+
 print("\nTesting inference using local docker container before deploying it as web service\n")
 from azureml.core.webservice import LocalWebservice
 # This is optional, if not provided Docker will choose a random unused port.
 deployment_config = LocalWebservice.deploy_configuration(port=6789)
 local_service = Model.deploy(ws, "local-mortgage-service-test", [model], inference_config, deployment_config)
 local_service.wait_for_deployment()
-single_row_data = df_test[0:10].to_json()
-run_data = json.dumps({'data':single_row_data})
 result = local_service.run(run_data)
 print("Inference result")
 print(result)
-print("Success" if len(result)==10 else "Failed")
+print("Success" if len(result)==len(df_test) else "Failed")
 local_service.delete()
 
 print("Deploying web inference service...")
@@ -345,7 +356,12 @@ print("\n\nTesting web service via WebService class interface...")
 result = web_service.run(run_data)
 print("Inference result")
 print(result)
-print("Success" if len(result)==10 else "Failed")
+print("Success" if len(result)==len(df_test) else "Failed")
+
+if seaborn_available:
+    resid_qq(np.array(result), np.array((df[0:50]).loc[:, 'rate_spread'].tolist()), 'Best algorithm')
+
+print(f"Inference url is {web_service.scoring_uri}")
 
 import requests
 scoring_uri = web_service.scoring_uri
@@ -358,14 +374,13 @@ headers['Authorization'] = f'Bearer {primary_key}'
 result = json.loads(requests.post(scoring_uri, headers=headers, data=run_data).text)
 print("Inference result")
 print(result)
-print("Success" if len(result)==10 else "Failed")
+print("Success" if len(result)==50 else "Failed")
 
 # TODO: In the cell below, print the logs of the web service and delete the service
 
 import time
 logs = web_service.get_logs()
 print(logs)
-time.sleep(120.0)  # wait a moment - otherwise we will receive an error as the deployment isn't yet finished 100%
 print("Cleaning up and deleting web service...")
 web_service.delete()
 print("Done")
