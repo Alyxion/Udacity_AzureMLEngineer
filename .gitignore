@@ -4,6 +4,7 @@ __pycache__/
 outputs/
 local_training_script/
 training_script/
+temp
 *.py[cod]
 Project_03_Capstone/azureml
 *$py.class
