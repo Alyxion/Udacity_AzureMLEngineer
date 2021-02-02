@@ -251,12 +251,12 @@ Below you can see how the deployed endpoint looks like in the AzureML portal:
 ![](screenshots/endpoint_screenshot.png)
 
 ## Screen Recording
-*TODO* Provide a link to a screen recording of the project in action. Remember that the screencast should demonstrate:
+Here you can find a short presentation of my model using an http endpoint in action:
 
-- A working model
-- Demo of the deployed  model
-- Demo of a sample request sent to the endpoint and its response
+https://youtu.be/EuQ-5y8mPH0
+
 
 
 ## Standout Suggestions
+
 If  I would want to further extend the performance of the model - as already mentioned above - I would try to engineer further features for each data row such as base loan rates in each state and further statistical data such as unemployment rates in different counties and current time dependent developments such as temporarily in general increasing rates. Statistical data already massively increased the performance of the model as it was presented here. As neural networks are usually not especially well suited for this task but ensembles are I would in addition definitely try even more complex compositions and validate their robustness with different training/test set samples. They take a lot of time to train (easily > 60 minutes) once they get especially deep so AutoML had not the chance to try those without betting all on a single card. I don't think that the r2-score could still be increased significantly by this approach but at least still a little bit.
