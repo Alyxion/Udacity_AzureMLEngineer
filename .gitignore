@@ -1,7 +1,14 @@
 ml_principal.json
 # Byte-compiled / optimized / DLL files
 __pycache__/
+outputs/
+local_training_script/
+training_script/
+aml_model
+hd_model
+temp
 *.py[cod]
+Project_03_Capstone/azureml
 *$py.class
 
 # C extensions
