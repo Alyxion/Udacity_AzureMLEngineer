@@ -129,7 +129,15 @@ dataset.to_pandas_dataframe()
 ## Automated ML
 Our task was a regression tasks as we wanted to determine the continuous, single value **rate_spread** in our dataset, so the offset to the base loan rate at this point of time. As primary metric I chose the **r2_score** as this metric is in general well suited for regression tasks which large variance taking this into account. As our dataset is very large.  Our target column was the **rate_spread**, so the offset to the base loan rate. Because the single features vary from categorical via continous to binary values I chose auto-featurization to let AutoML detect them intelligently. As we are working with more than 70 columns and 100,000 data rows I originally defined a high timeout of 180 minutes of which the system effectively also required nearly 70. minutes. To minimize the execution time I chose a **max concurrent iterations** value of 5 which was the maximum number of five 4 vCPU machines I was able to use in a sponsored MSDN subscription. For the computation itself I chose a STANDARD_DS12_V2 with slightly increased ram space to this would not become an issue. 
 
-The best AutoML model was an ensemble of LightGBM and several boosting models combined and achieved an r2_score of 0.8173. 
+The best AutoML model was an ensemble of two XGBoostingRegressors, similar to the ones I used in my custom HyperDrive model, two LightGBM and a third XGBoostingRegressor. The first two XG regressors though defined the outcome with a total weighting of 80%. The other three regressor each participated in the shared voting with about 0.066666% each.
+
+Before the data was fed into the regression models it was prepared for the training with help of a DataTransformer to for example convert the remaining categorical data values into one hot encoded representations and to normalize the data.
+
+The parameters for XGBoostingRegressor are a base_score of 0.5 - assuming the target labels have been normalized to a 0 to 1.0 range, a quite high eta range of 0.5 which leads to shorter runs by faster reducing the influence of each boosting step. A quite common and usually reasonable max_depth of 6... in my tries a maximum depth of 8 performed slightly better though. It samples 100% of the columns by level, 100% of the columns by node and 90% of the columns by tree - so a quite careful tree selection process. For the boosting algorithm itself it uses the classical gbtreeboster.
+
+https://xgboost.readthedocs.io/en/latest/parameter.html
+
+
 
 **Improvements**
 
@@ -207,6 +215,10 @@ Here you can find the output of the best performing model's result:
 
 
 
+And here it's details in the Azure portal:
+
+![](screenshots/hyperdrive_best_model_2.png)
+
 
 
 ---
@@ -257,6 +269,6 @@ https://youtu.be/EuQ-5y8mPH0
 
 
 
-## Standout Suggestions
+## Future Improvements
 
 If  I would want to further extend the performance of the model - as already mentioned above - I would try to engineer further features for each data row such as base loan rates in each state and further statistical data such as unemployment rates in different counties and current time dependent developments such as temporarily in general increasing rates. Statistical data already massively increased the performance of the model as it was presented here. As neural networks are usually not especially well suited for this task but ensembles are I would in addition definitely try even more complex compositions and validate their robustness with different training/test set samples. They take a lot of time to train (easily > 60 minutes) once they get especially deep so AutoML had not the chance to try those without betting all on a single card. I don't think that the r2-score could still be increased significantly by this approach but at least still a little bit.
